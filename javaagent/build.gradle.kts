@@ -52,6 +52,8 @@ val licenseReportDependencies by configurations.creating {
 }
 
 dependencies {
+  implementation("org.xerial.snappy:snappy-java:1.1.10.1")
+  implementation("commons-io:commons-io:2.14.0")
   bootstrapLibs(project(":instrumentation-api"))
   // opentelemetry-api is an api dependency of :instrumentation-api, but opentelemetry-api-incubator is not
   bootstrapLibs("io.opentelemetry:opentelemetry-api-incubator")
