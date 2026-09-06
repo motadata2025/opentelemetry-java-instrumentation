@@ -264,8 +264,8 @@ on:
 
 ### Test Configuration
 ```yaml
-# Java version
-java-version: '11'
+# Java version (requires 17+ for jflex plugin)
+java-version: '17'
 
 # Gradle options
 GRADLE_OPTS: '-Xmx2g'
