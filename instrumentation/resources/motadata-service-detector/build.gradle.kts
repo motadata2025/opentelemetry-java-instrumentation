@@ -2,6 +2,10 @@ plugins {
   id("otel.sdk-extension")
 }
 
+base {
+  archivesName.set("opentelemetry-motadata-service-detector")
+}
+
 dependencies {
   compileOnly("io.opentelemetry:opentelemetry-sdk-extension-autoconfigure-spi")
   implementation("io.opentelemetry:opentelemetry-sdk-common")
