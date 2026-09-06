@@ -62,21 +62,23 @@ jobs:
 
       - name: Build Java Agent JAR
         run: |
-          ./gradlew :javaagent:build \
-            -x test \
+          ./gradlew :javaagent:shadowJar \
             --no-daemon \
             -PskipSigningKeyGeneration=true
         env:
           GRADLE_OPTS: '-Xmx2g'
 
-      - name: Debug - List build output
+      - name: Debug - Check build output
         if: always()
         run: |
-          echo "Looking for JAR files..."
-          find javaagent/build -name "*.jar" -type f 2>/dev/null || echo "No JARs found"
-          echo ""
-          echo "Full javaagent/build directory structure:"
-          ls -la javaagent/build/libs/ 2>/dev/null || echo "libs directory not found"
+          echo "=== Checking for JAR files in javaagent/build/libs ==="
+          if [ -d "javaagent/build/libs" ]; then
+            ls -lh javaagent/build/libs/
+          else
+            echo "ERROR: javaagent/build/libs directory does not exist"
+            echo "Contents of javaagent/build:"
+            ls -la javaagent/build/ || echo "javaagent/build not found"
+          fi
 
       - name: Upload Java Agent Artifact
         uses: actions/upload-artifact@v4
