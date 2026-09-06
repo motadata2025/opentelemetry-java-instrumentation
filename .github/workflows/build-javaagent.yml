@@ -84,7 +84,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: motadata-javaagent
-          path: javaagent/build/libs/opentelemetry-javaagent.jar
+          path: javaagent/build/libs/*.jar
           retention-days: 90
           if-no-files-found: error
 
@@ -92,7 +92,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: motadata-service-detector
-          path: instrumentation/resources/motadata-service-detector/build/libs/opentelemetry-resources-*.jar
+          path: instrumentation/resources/motadata-service-detector/build/libs/*.jar
           retention-days: 90
           if-no-files-found: error
 
