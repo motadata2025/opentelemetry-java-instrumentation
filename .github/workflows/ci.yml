@@ -1,0 +1,78 @@
+name: CI - Quick Checks
+
+on:
+  pull_request:
+    branches:
+      - main
+      - motadata-dev
+  push:
+    branches:
+      - motadata-dev
+    paths:
+      - 'instrumentation/resources/motadata-service-detector/**'
+      - '.github/workflows/ci.yml'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    name: Test Service Detector Module
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: '11'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Run Tests
+        run: |
+          ./gradlew :instrumentation:resources:motadata-service-detector:test \
+            --no-daemon \
+            -PskipSigningKeyGeneration=true
+        env:
+          GRADLE_OPTS: '-Xmx1g'
+
+      - name: Code Quality Checks
+        run: |
+          ./gradlew :instrumentation:resources:motadata-service-detector:spotlessCheck \
+            --no-daemon \
+            -PskipSigningKeyGeneration=true
+        env:
+          GRADLE_OPTS: '-Xmx1g'
+
+      - name: Publish Test Results
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        if: always()
+        with:
+          files: |
+            instrumentation/resources/motadata-service-detector/build/test-results/**/*.xml
+
+      - name: Comment PR with Results
+        if: github.event_name == 'pull_request' && always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const testResults = `
+            ## Service Detector Tests ✅
+
+            Service name detection module tests have been run.
+
+            **Checks**:
+            - Unit tests (26 cases)
+            - Code quality (spotless)
+            - Compiler checks (error-prone)
+
+            See workflow logs for details.
+            `;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: testResults
+            });

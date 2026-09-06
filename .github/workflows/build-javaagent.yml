@@ -1,0 +1,164 @@
+name: Build Motadata Java Agent
+
+on:
+  push:
+    branches:
+      - main
+      - motadata-dev
+    paths:
+      - 'javaagent/**'
+      - 'instrumentation/resources/motadata-service-detector/**'
+      - 'instrumentation/**'
+      - '.github/workflows/build-javaagent.yml'
+  pull_request:
+    branches:
+      - main
+      - motadata-dev
+  workflow_dispatch:  # Allow manual trigger
+    inputs:
+      release:
+        description: 'Create release assets'
+        required: false
+        default: 'false'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    name: Build Java Agent
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: '11'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Build Motadata Service Detector Module
+        run: |
+          ./gradlew :instrumentation:resources:motadata-service-detector:build \
+            -x test \
+            --no-daemon \
+            -PskipSigningKeyGeneration=true
+        env:
+          GRADLE_OPTS: '-Xmx2g'
+
+      - name: Run Tests
+        run: |
+          ./gradlew :instrumentation:resources:motadata-service-detector:test \
+            --no-daemon \
+            -PskipSigningKeyGeneration=true
+        env:
+          GRADLE_OPTS: '-Xmx2g'
+
+      - name: Build Java Agent JAR
+        run: |
+          ./gradlew :javaagent:build \
+            -x test \
+            --no-daemon \
+            -PskipSigningKeyGeneration=true
+        env:
+          GRADLE_OPTS: '-Xmx2g'
+
+      - name: Upload Java Agent Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: motadata-javaagent
+          path: javaagent/build/libs/opentelemetry-javaagent.jar
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: Upload Service Detector JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: motadata-service-detector
+          path: instrumentation/resources/motadata-service-detector/build/libs/opentelemetry-resources-*.jar
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: Get JAR Info
+        run: |
+          AGENT_JAR="javaagent/build/libs/opentelemetry-javaagent.jar"
+          DETECTOR_JAR=$(ls instrumentation/resources/motadata-service-detector/build/libs/opentelemetry-resources-*-SNAPSHOT.jar | head -1)
+
+          echo "## Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Java Agent JAR" >> $GITHUB_STEP_SUMMARY
+          echo "- **File**: $(basename $AGENT_JAR)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Size**: $(ls -lh $AGENT_JAR | awk '{print $5}')" >> $GITHUB_STEP_SUMMARY
+          echo "- **Path**: \`$AGENT_JAR\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Service Detector JAR" >> $GITHUB_STEP_SUMMARY
+          echo "- **File**: $(basename $DETECTOR_JAR)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Size**: $(ls -lh $DETECTOR_JAR | awk '{print $5}')" >> $GITHUB_STEP_SUMMARY
+          echo "- **Path**: \`$DETECTOR_JAR\`" >> $GITHUB_STEP_SUMMARY
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    name: Create Release
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.release == 'true' && github.ref == 'refs/heads/main'
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Generate release name
+        id: release
+        run: |
+          VERSION=$(date +%Y.%m.%d.%H%M%S)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=release-$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.release.outputs.tag }}
+          name: Motadata Java Agent Release - ${{ steps.release.outputs.version }}
+          body: |
+            # Motadata Java Agent Release
+
+            **Build Date**: ${{ steps.release.outputs.version }}
+
+            ## Artifacts Included
+
+            - `motadata-javaagent.jar` - Ready-to-use Java agent with service detection
+            - `opentelemetry-resources-*.jar` - Service name detector module
+
+            ## Quick Start
+
+            ```bash
+            java -javaagent:motadata-javaagent.jar -jar your-app.jar
+            ```
+
+            Service name will be automatically detected from:
+            1. Explicit configuration (`-Dotel.service.name=...`)
+            2. Spring Boot application name
+            3. JAR filename
+            4. Main class name
+
+            ## Documentation
+
+            See the module README for complete documentation and configuration options.
+          files: |
+            artifacts/motadata-javaagent/opentelemetry-javaagent.jar
+            artifacts/motadata-service-detector/opentelemetry-resources-*.jar
+          draft: false
+          prerelease: false

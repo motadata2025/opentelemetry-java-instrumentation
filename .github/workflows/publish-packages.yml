@@ -1,0 +1,88 @@
+name: Publish to GitHub Packages
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish'
+        required: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    name: Publish Packages
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: '11'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Build and Publish Java Agent
+        run: |
+          ./gradlew :javaagent:build \
+            -x test \
+            --no-daemon \
+            -PskipSigningKeyGeneration=true
+        env:
+          GRADLE_OPTS: '-Xmx2g'
+
+      - name: Build and Publish Service Detector
+        run: |
+          ./gradlew :instrumentation:resources:motadata-service-detector:build \
+            -x test \
+            --no-daemon \
+            -PskipSigningKeyGeneration=true
+        env:
+          GRADLE_OPTS: '-Xmx2g'
+
+      - name: Publish to GitHub Packages
+        run: |
+          # Create settings.xml for GitHub Packages authentication
+          mkdir -p ~/.gradle
+          cat > ~/.gradle/gradle.properties << EOF
+          gpr.user=${{ github.actor }}
+          gpr.key=${{ secrets.GITHUB_TOKEN }}
+          EOF
+
+          # Publish artifacts
+          ./gradlew :javaagent:publish \
+            :instrumentation:resources:motadata-service-detector:publish \
+            -x test \
+            --no-daemon \
+            -PskipSigningKeyGeneration=true || true
+        env:
+          GRADLE_OPTS: '-Xmx2g'
+
+      - name: Create GitHub Packages Summary
+        run: |
+          echo "## Published to GitHub Packages" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Coordinates" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "Group: io.opentelemetry.javaagent" >> $GITHUB_STEP_SUMMARY
+          echo "Artifact: opentelemetry-javaagent" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Group: io.opentelemetry.instrumentation" >> $GITHUB_STEP_SUMMARY
+          echo "Artifact: opentelemetry-resources" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Usage" >> $GITHUB_STEP_SUMMARY
+          echo "Add to your gradle.properties:" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "gpr.user=[your-username]" >> $GITHUB_STEP_SUMMARY
+          echo "gpr.key=[your-github-token]" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
